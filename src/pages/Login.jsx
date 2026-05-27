@@ -1,78 +1,52 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Sparkles, Mail, Lock, ArrowRight } from 'lucide-react';
+import{useState}from'react';
+import{useNavigate,Link,useLocation}from'react-router-dom';
+import{useApp}from'../context/AppContext';
+import PageWrapper from'../components/PageWrapper';
 
-export default function Login() {
-  const navigate = useNavigate();
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [error, setError] = useState('');
+export default function Login(){
+  const navigate=useNavigate();
+  const location=useLocation();
+  const{login}=useApp();
+  const[email,setEmail]=useState('');
+  const[password,setPassword]=useState('');
+  const[error,setError]=useState('');
+  const[loading,setLoading]=useState(false);
 
-  const handleSubmit = e => {
-    e.preventDefault();
-    if (!form.email || !form.password) { setError('Please fill in all fields.'); return; }
-    // Mock auth — accept any credentials
-    navigate('/');
+  const handleSubmit=async e=>{
+    e.preventDefault();setError('');setLoading(true);
+    const result=login(email,password);
+    if(result.error){setError(result.error);setLoading(false);}
+    else navigate(location.state?.from?.pathname||'/');
   };
 
-  return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', position: 'relative', zIndex: 1 }}>
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-        style={{ width: '100%', maxWidth: 400 }}
-      >
-        {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-          <motion.div
-            animate={{ rotate: [0, 360] }}
-            transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
-            style={{ display: 'inline-block', marginBottom: '0.75rem' }}
-          >
-            <Sparkles size={32} style={{ color: 'var(--accent)' }} />
-          </motion.div>
-          <h1 style={{ fontSize: '2rem', marginBottom: '0.4rem' }}>Luminary</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Welcome back, scholar</p>
+  return(
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem',position:'relative',zIndex:1}}>
+      <div style={{width:'100%',maxWidth:400}}>
+        <div style={{textAlign:'center',marginBottom:'2.5rem'}}>
+          <h1 style={{fontSize:'3rem',fontFamily:"'Cormorant Garamond',serif",fontWeight:600,marginBottom:'0.5rem'}}>Luminary</h1>
+          <p style={{color:'var(--text-muted)',fontSize:'0.875rem',letterSpacing:'0.04em'}}>welcome back, scholar</p>
         </div>
-
-        {/* Form */}
-        <div className="modal" style={{ borderRadius: 20 }}>
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div className="modal">
+          <form onSubmit={handleSubmit} style={{display:'flex',flexDirection:'column',gap:'1rem'}}>
             <div>
               <label>Email</label>
-              <div style={{ position: 'relative' }}>
-                <Mail size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input className="input" type="email" placeholder="you@example.com" value={form.email}
-                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                  style={{ paddingLeft: '2.25rem' }} />
-              </div>
+              <input className="input" type="email" placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email"/>
             </div>
             <div>
               <label>Password</label>
-              <div style={{ position: 'relative' }}>
-                <Lock size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input className="input" type="password" placeholder="••••••••" value={form.password}
-                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                  style={{ paddingLeft: '2.25rem' }} />
-              </div>
+              <input className="input" type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)}/>
             </div>
-            {error && <p style={{ color: '#f43f5e', fontSize: '0.8rem' }}>{error}</p>}
-            <motion.button
-              type="submit" className="btn btn-primary"
-              style={{ width: '100%', justifyContent: 'center', marginTop: '0.5rem', padding: '0.75rem' }}
-              whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
-            >
-              Enter your universe <ArrowRight size={16} />
-            </motion.button>
+            {error&&<p style={{color:'#f43f5e',fontSize:'0.82rem',margin:0}}>{error}</p>}
+            <button type="submit" className="btn btn-primary" disabled={loading} style={{width:'100%',justifyContent:'center',padding:'0.75rem',marginTop:'0.25rem',fontSize:'0.9rem'}}>
+              {loading?'Signing in…':'Enter your universe →'}
+            </button>
           </form>
-          <div className="divider" />
-          <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            New here?{' '}
-            <Link to="/signup" style={{ color: 'var(--accent)', fontWeight: 500 }}>Create an account</Link>
+          <div className="divider"/>
+          <p style={{textAlign:'center',fontSize:'0.85rem',color:'var(--text-muted)'}}>
+            New here?{' '}<Link to="/signup" style={{color:'var(--accent)',fontWeight:500}}>Create an account</Link>
           </p>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

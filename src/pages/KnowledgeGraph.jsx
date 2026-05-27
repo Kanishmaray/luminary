@@ -1,174 +1,153 @@
-import { useEffect, useRef, useState } from 'react';
-import * as d3 from 'd3';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Tag, BookOpen } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { getKnowledgeGraphData, getColorHex } from '../store/data';
-import PageWrapper from '../components/PageWrapper';
+import{useEffect,useRef,useState}from'react';
+import{useApp}from'../context/AppContext';
+import{getKnowledgeGraphData}from'../store/data';
+import PageWrapper from'../components/PageWrapper';
 
-export default function KnowledgeGraph() {
-  const svgRef = useRef(null);
-  const { courses } = useApp();
-  const [selected, setSelected] = useState(null);
-  const [graphData, setGraphData] = useState({ nodes: [], links: [] });
+export default function KnowledgeGraph(){
+  const{courses}=useApp();
+  const svgRef=useRef(null);
+  const containerRef=useRef(null);
+  const[tooltip,setTooltip]=useState(null);
+  const[hasD3,setHasD3]=useState(false);
+  const simRef=useRef(null);
 
-  useEffect(() => { setGraphData(getKnowledgeGraphData()); }, [courses]);
+  useEffect(()=>{
+    const{nodes,links}=getKnowledgeGraphData();
+    if(!nodes.length)return;
 
-  useEffect(() => {
-    if (!svgRef.current || !graphData.nodes.length) return;
+    let cancelled=false;
+    import('https://cdn.jsdelivr.net/npm/d3@7/+esm').then(d3=>{
+      if(cancelled)return;
+      setHasD3(true);
+      const svg=d3.select(svgRef.current);
+      const container=containerRef.current;
+      svg.selectAll('*').remove();
 
-    const el = svgRef.current;
-    const W = el.clientWidth || 800;
-    const H = el.clientHeight || 500;
+      const W=container.clientWidth||800;
+      const H=container.clientHeight||600;
+      svg.attr('viewBox','0 0 '+W+' '+H).attr('width','100%').attr('height','100%');
 
-    d3.select(el).selectAll('*').remove();
+      // Zoom/pan group
+      const g=svg.append('g').attr('class','zoom-group');
 
-    const svg = d3.select(el)
-      .attr('width', W).attr('height', H);
+      const zoom=d3.zoom()
+        .scaleExtent([0.2,6])
+        .on('zoom',event=>{g.attr('transform',event.transform);});
 
-    const defs = svg.append('defs');
-    graphData.nodes.filter(n => n.type === 'resource').forEach(n => {
-      defs.append('radialGradient').attr('id', `glow-${n.id}`)
-        .selectAll('stop').data([
-          { offset: '0%', color: n.color, opacity: 0.3 },
-          { offset: '100%', color: n.color, opacity: 0 },
-        ]).enter().append('stop')
-        .attr('offset', d => d.offset)
-        .attr('stop-color', d => d.color)
-        .attr('stop-opacity', d => d.opacity);
-    });
+      svg.call(zoom).on('dblclick.zoom',null);
 
-    const sim = d3.forceSimulation(graphData.nodes)
-      .force('link', d3.forceLink(graphData.links).id(d => d.id).distance(90))
-      .force('charge', d3.forceManyBody().strength(-180))
-      .force('center', d3.forceCenter(W / 2, H / 2))
-      .force('collision', d3.forceCollide(28));
+      // Arrow marker
+      svg.append('defs').append('marker')
+        .attr('id','arrow').attr('viewBox','0 -4 8 8').attr('refX',14).attr('refY',0)
+        .attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
+        .append('path').attr('d','M0,-4L8,0L0,4').attr('fill','#888').attr('opacity',0.5);
 
-    const link = svg.append('g').selectAll('line')
-      .data(graphData.links).enter().append('line')
-      .attr('stroke', d => {
-        const src = graphData.nodes.find(n => n.id === (d.source.id || d.source));
-        return src?.color || '#555';
-      })
-      .attr('stroke-opacity', 0.25)
-      .attr('stroke-width', 1.2);
+      // Links
+      const link=g.append('g').selectAll('line').data(links).join('line')
+        .attr('stroke','#555').attr('stroke-width',1).attr('stroke-opacity',0.3)
+        .attr('marker-end','url(#arrow)');
 
-    const node = svg.append('g').selectAll('g')
-      .data(graphData.nodes).enter().append('g')
-      .attr('cursor', 'pointer')
-      .call(d3.drag()
-        .on('start', (event, d) => { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
-        .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
-        .on('end', (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
-      )
-      .on('click', (event, d) => setSelected(d));
+      // Nodes
+      const node=g.append('g').selectAll('g').data(nodes).join('g')
+        .attr('cursor','pointer')
+        .call(d3.drag()
+          .on('start',(event,d)=>{if(!event.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;})
+          .on('drag',(event,d)=>{d.fx=event.x;d.fy=event.y;})
+          .on('end',(event,d)=>{if(!event.active)sim.alphaTarget(0);d.fx=null;d.fy=null;}));
 
-    // Glow for resource nodes
-    node.filter(d => d.type === 'resource').append('circle')
-      .attr('r', 20).attr('fill', d => `url(#glow-${d.id})`);
+      node.each(function(d){
+        const sel=d3.select(this);
+        const r=d.type==='concept'?8:6;
+        const col=d.type==='concept'?'#a78bfa':d.color;
+        // Glow ring
+        sel.append('circle').attr('r',r+5).attr('fill',col).attr('opacity',0.12);
+        sel.append('circle').attr('r',r+2).attr('fill',col).attr('opacity',0.18);
+        // Main dot
+        sel.append('circle').attr('r',r).attr('fill',col).attr('opacity',0.9);
+        // White core
+        sel.append('circle').attr('r',r*0.35).attr('fill','#fff').attr('opacity',0.85);
+        // Label
+        sel.append('text')
+          .text(d.label.length>18?d.label.slice(0,16)+'…':d.label)
+          .attr('dy','0.35em').attr('x',r+6)
+          .attr('font-size',d.type==='concept'?'11px':'10px')
+          .attr('font-family','Space Grotesk,sans-serif')
+          .attr('fill','#ccc').attr('opacity',0.7)
+          .attr('pointer-events','none');
+      });
 
-    node.append('circle')
-      .attr('r', d => d.type === 'resource' ? 9 : 6)
-      .attr('fill', d => d.type === 'resource' ? d.color : 'var(--bg-secondary)')
-      .attr('stroke', d => d.color)
-      .attr('stroke-width', d => d.type === 'resource' ? 0 : 1.5)
-      .attr('fill-opacity', d => d.type === 'resource' ? 0.9 : 0.3);
+      node.on('mouseenter',(event,d)=>{
+        setTooltip({label:d.label,type:d.type,x:event.clientX,y:event.clientY});
+      }).on('mousemove',(event)=>{
+        setTooltip(t=>t?{...t,x:event.clientX,y:event.clientY}:null);
+      }).on('mouseleave',()=>{setTooltip(null);});
 
-    node.append('text')
-      .attr('dy', d => d.type === 'resource' ? -14 : 16)
-      .attr('text-anchor', 'middle')
-      .attr('font-size', d => d.type === 'resource' ? 10 : 9)
-      .attr('fill', 'var(--text-secondary)')
-      .attr('pointer-events', 'none')
-      .text(d => d.label.length > 22 ? d.label.slice(0, 22) + '…' : d.label);
+      const sim=d3.forceSimulation(nodes)
+        .force('link',d3.forceLink(links).id(d=>d.id).distance(90).strength(0.4))
+        .force('charge',d3.forceManyBody().strength(-180))
+        .force('center',d3.forceCenter(W/2,H/2))
+        .force('collide',d3.forceCollide(20));
 
-    sim.on('tick', () => {
-      link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
-          .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
-      node.attr('transform', d => `translate(${d.x},${d.y})`);
-    });
+      simRef.current=sim;
 
-    return () => sim.stop();
-  }, [graphData]);
+      sim.on('tick',()=>{
+        link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
+            .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+        node.attr('transform',d=>'translate('+d.x+','+d.y+')');
+      });
+    }).catch(()=>{});
 
-  const selectedCourse = selected?.courseId ? courses.find(c => c.id === selected.courseId) : null;
-  const selectedColor = selectedCourse ? getColorHex(selectedCourse.color) : selected?.color || 'var(--accent)';
+    return()=>{cancelled=true;if(simRef.current)simRef.current.stop();};
+  },[courses]);
 
-  const getConnectedConcepts = (nodeId) => {
-    return graphData.links.filter(l => (l.source.id || l.source) === nodeId || (l.target.id || l.target) === nodeId)
-      .map(l => {
-        const otherId = (l.source.id || l.source) === nodeId ? (l.target.id || l.target) : (l.source.id || l.source);
-        return graphData.nodes.find(n => n.id === otherId);
-      }).filter(Boolean);
-  };
+  const{nodes,links}=getKnowledgeGraphData();
+  const isEmpty=nodes.length===0;
 
-  return (
+  return(
     <PageWrapper>
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h1>Knowledge graph</h1>
-        <p style={{ marginTop: '0.3rem' }}>
-          {graphData.nodes.filter(n => n.type === 'resource').length} ideas · {graphData.nodes.filter(n => n.type === 'concept').length} concepts
-        </p>
-      </div>
+      <div style={{maxWidth:'100%',margin:'0 auto',height:'calc(100vh - var(--nav-height) - 4rem)',display:'flex',flexDirection:'column'}}>
+        <div style={{marginBottom:'1.5rem',flexShrink:0}}>
+          <h1 style={{fontFamily:'Cormorant Garamond,serif',fontSize:'clamp(1.8rem,3vw,2.5rem)',fontWeight:600,lineHeight:1.1,marginBottom:'0.3rem'}}>Knowledge Graph</h1>
+          <p style={{color:'var(--text-muted)',fontSize:'0.9rem'}}>
+            {isEmpty?'Connections appear as you tag completed resources':'Scroll to zoom · drag nodes · pan to explore'}
+          </p>
+        </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 300px' : '1fr', gap: '1.25rem', transition: 'all 0.3s' }}>
-        <div className="card" style={{ padding: 0, overflow: 'hidden', minHeight: 500 }}>
-          {graphData.nodes.length === 0 ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 500, flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ fontSize: '2rem' }}>✦</div>
-              <p style={{ textAlign: 'center' }}>Complete resources and add tags to start building your knowledge graph.</p>
+        {isEmpty?(
+          <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',border:'1px dashed var(--border)',borderRadius:16,color:'var(--text-muted)',flexDirection:'column',gap:'0.8rem',textAlign:'center',padding:'2rem'}}>
+            <div style={{fontSize:'3rem',opacity:0.4}}>🕸</div>
+            <p style={{fontFamily:'Cormorant Garamond,serif',fontSize:'1.4rem'}}>The web of ideas is waiting</p>
+            <p style={{fontSize:'0.9rem'}}>Complete a resource and add tags to see connections form.</p>
+          </div>
+        ):(
+          <div ref={containerRef} style={{flex:1,position:'relative',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:16,overflow:'hidden'}}>
+            <svg ref={svgRef} style={{width:'100%',height:'100%',display:'block'}}/>
+            {/* Hint */}
+            <div style={{position:'absolute',bottom:12,right:14,fontSize:'0.72rem',color:'var(--text-muted)',opacity:0.5,pointerEvents:'none',fontFamily:'Space Grotesk,sans-serif'}}>
+              scroll to zoom · drag to pan
             </div>
-          ) : (
-            <svg ref={svgRef} style={{ width: '100%', height: 500, display: 'block' }} />
-          )}
-        </div>
-
-        <AnimatePresence>
-          {selected && (
-            <motion.div initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}>
-              <div className="card" style={{ borderTop: `3px solid ${selectedColor}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    {selected.type === 'concept' ? <Tag size={15} style={{ color: selectedColor }} /> : <BookOpen size={15} style={{ color: selectedColor }} />}
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      {selected.type}
-                    </span>
-                  </div>
-                  <button className="btn-icon" onClick={() => setSelected(null)}><X size={15} /></button>
-                </div>
-                <h3 style={{ marginBottom: selectedCourse ? '0.25rem' : '1rem', fontSize: '1rem', lineHeight: 1.3 }}>{selected.label}</h3>
-                {selectedCourse && (
-                  <p style={{ fontSize: '0.78rem', color: selectedColor, marginBottom: '1rem', fontWeight: 500 }}>{selectedCourse.title}</p>
-                )}
-                <div className="divider" />
-                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.6rem', fontWeight: 500 }}>
-                  Connected to {getConnectedConcepts(selected.id).length} {selected.type === 'resource' ? 'concepts' : 'resources'}
-                </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                  {getConnectedConcepts(selected.id).map(n => (
-                    <button key={n.id} onClick={() => setSelected(n)} className="tag"
-                      style={{ background: `${n.color || selectedColor}18`, color: n.color || selectedColor, border: `1px solid ${n.color || selectedColor}30`, fontSize: '0.75rem', cursor: 'pointer' }}>
-                      {n.label}
-                    </button>
-                  ))}
-                </div>
+            {/* Legend */}
+            <div style={{position:'absolute',top:12,left:14,display:'flex',gap:'1rem',background:'rgba(0,0,0,0.4)',backdropFilter:'blur(6px)',borderRadius:8,padding:'0.5rem 0.8rem'}}>
+              <div style={{display:'flex',alignItems:'center',gap:'0.4rem'}}>
+                <div style={{width:8,height:8,borderRadius:'50%',background:'#a78bfa'}}/>
+                <span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontFamily:'Space Grotesk,sans-serif'}}>Concept</span>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <div style={{display:'flex',alignItems:'center',gap:'0.4rem'}}>
+                <div style={{width:8,height:8,borderRadius:'50%',background:'#6366f1'}}/>
+                <span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontFamily:'Space Grotesk,sans-serif'}}>Resource</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Legend */}
-      <div style={{ display: 'flex', gap: '1.5rem', marginTop: '1rem', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--accent)' }} />
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Resource (colored by course)</span>
+      {/* Tooltip */}
+      {tooltip&&(
+        <div style={{position:'fixed',left:tooltip.x+12,top:tooltip.y-10,pointerEvents:'none',zIndex:300,background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:8,padding:'0.5rem 0.8rem',boxShadow:'0 4px 20px rgba(0,0,0,0.4)',maxWidth:200}}>
+          <p style={{fontFamily:'Space Grotesk,sans-serif',fontSize:'0.82rem',fontWeight:600,color:'var(--text)',marginBottom:'0.15rem'}}>{tooltip.label}</p>
+          <p style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>{tooltip.type==='concept'?'Concept tag':'Resource'}</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'none', border: '1.5px solid #888' }} />
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Concept / tag</span>
-        </div>
-      </div>
+      )}
     </PageWrapper>
   );
 }

@@ -1,335 +1,285 @@
-import { useState, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, CheckCircle2, Circle, Clock, ExternalLink, Tag, PenLine, X, Plus, ChevronDown, ChevronUp, BookOpen, Video, Headphones, FileText, Film, Globe } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { getColorHex, RESOURCE_TYPES, SUBJECT_COLORS } from '../store/data';
-import PageWrapper from '../components/PageWrapper';
+import{useState,useEffect,useRef}from'react';
+import{useParams,Link}from'react-router-dom';
+import{useApp}from'../context/AppContext';
+import{SUBJECT_COLORS,getWeeklyRecommendation}from'../store/data';
+import PageWrapper from'../components/PageWrapper';
 
-const TYPE_ICONS = { Book: BookOpen, Video, Podcast: Headphones, Essay: FileText, Documentary: Film, Article: Globe, Course: BookOpen, Other: Globe };
+// ─────────────────────────────────────────────
+// Glowy pulsating constellation
+// ─────────────────────────────────────────────
+function Constellation({resources,color}){
+  const hex=color||'#6366f1';
+  const completed=resources.filter(r=>r.completed);
+  const pending=resources.filter(r=>!r.completed);
 
-function ResourceIcon({ type, size = 15, color }) {
-  const Icon = TYPE_ICONS[type] || Globe;
-  return <Icon size={size} style={{ color }} />;
-}
+  // stable positions per resource
+  function stablePos(id,i,total,radius){
+    const angle=(i/total)*Math.PI*2-Math.PI/2;
+    return{x:150+radius*Math.cos(angle),y:120+radius*Math.sin(angle)};
+  }
 
-// Constellation SVG
-function Constellation({ resources, color }) {
-  const completed = resources.filter(r => r.completed);
-  const total = resources.length;
-  if (total === 0) return null;
+  const completedPositions=completed.map((r,i)=>({...stablePos(r.id,i,Math.max(completed.length,1),80),...r}));
+  const pendingPositions=pending.map((r,i)=>({...stablePos(r.id,i,Math.max(pending.length,1),110),...r}));
 
-  const W = 320, H = 180;
-  const positions = resources.map((_, i) => {
-    const angle = (i / total) * Math.PI * 2 - Math.PI / 2;
-    const radius = Math.min(W, H) * 0.36;
-    return { x: W / 2 + radius * Math.cos(angle), y: H / 2 + radius * Math.sin(angle) };
-  });
+  return(
+    <div style={{position:'relative',borderRadius:16,overflow:'hidden',background:'radial-gradient(ellipse at center,'+hex+'08 0%,transparent 70%)'}}>
+      <style>{`
+        @keyframes pulseGlow{0%,100%{opacity:.7;r:4px;filter:url(#starBlur)}50%{opacity:1;r:6px;filter:url(#starBlurBig)}}
+        @keyframes orbitDrift{0%,100%{transform:translate(0,0)}50%{transform:translate(1px,-2px)}}
+        @keyframes connectPulse{0%,100%{stroke-opacity:.15}50%{stroke-opacity:.45}}
+        @keyframes pendingPulse{0%,100%{opacity:.3;r:3px}50%{opacity:.6;r:4px}}
+        .star-glow{animation:pulseGlow 2.8s ease-in-out infinite}
+        .star-orbit{animation:orbitDrift 4s ease-in-out infinite}
+        .star-pending{animation:pendingPulse 3.5s ease-in-out infinite}
+        .connect-line{animation:connectPulse 3s ease-in-out infinite}
+      `}</style>
+      <svg viewBox="0 0 300 240" style={{width:'100%',maxWidth:300}} xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="starBlur" x="-150%" y="-150%" width="400%" height="400%">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="starBlurBig" x="-200%" y="-200%" width="500%" height="500%">
+            <feGaussianBlur stdDeviation="6" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <radialGradient id={'cg'+hex.replace('#','')} cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor={hex} stopOpacity="0.6"/>
+            <stop offset="100%" stopColor={hex} stopOpacity="0"/>
+          </radialGradient>
+        </defs>
 
-  return (
-    <svg width={W} height={H} style={{ overflow: 'visible' }}>
-      {/* Lines between completed consecutive nodes */}
-      {resources.map((r, i) => {
-        if (!r.completed) return null;
-        const next = resources[i + 1];
-        if (!next?.completed) return null;
-        return (
-          <motion.line key={`l${i}`} x1={positions[i].x} y1={positions[i].y} x2={positions[i+1].x} y2={positions[i+1].y}
-            stroke={color} strokeWidth={1} strokeOpacity={0.4}
-            initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }}
-            transition={{ duration: 0.8, delay: i * 0.1 }} />
-        );
-      })}
-      {/* Stars */}
-      {resources.map((r, i) => {
-        const { x, y } = positions[i];
-        const done = r.completed;
-        return (
-          <g key={r.id}>
-            {done && (
-              <motion.circle cx={x} cy={y} r={10} fill={color} fillOpacity={0.1}
-                animate={{ r: [10, 14, 10] }} transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.3 }} />
-            )}
-            <motion.circle cx={x} cy={y} r={done ? 5 : 3}
-              fill={done ? color : 'none'} stroke={color} strokeWidth={1.5}
-              strokeOpacity={done ? 1 : 0.4} fillOpacity={done ? 1 : 0}
-              initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: i * 0.08 + 0.2 }} />
-            <motion.text x={x} y={y + 16} textAnchor="middle" fontSize={8} fill={color} fillOpacity={done ? 0.7 : 0.3}
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.08 + 0.4 }}>
-              {i + 1}
-            </motion.text>
+        {/* Nebula glow */}
+        <ellipse cx="150" cy="120" rx="90" ry="70" fill={'url(#cg'+hex.replace('#','')+')'} opacity="0.5"/>
+
+        {/* Connection lines between completed stars */}
+        {completedPositions.map((a,i)=>completedPositions.slice(i+1).map((b,j)=>{
+          const dist=Math.hypot(a.x-b.x,a.y-b.y);
+          if(dist>120)return null;
+          return(<line key={a.id+b.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={hex} strokeWidth="0.8" className="connect-line" style={{animationDelay:(i*0.4)+'s'}}/>);
+        }))}
+
+        {/* Pending (dim) stars */}
+        {pendingPositions.map((r,i)=>(
+          <g key={r.id} className="star-orbit" style={{animationDelay:(i*0.7)+'s'}}>
+            <circle cx={r.x} cy={r.y} r="2.5" fill={hex} opacity="0.2" className="star-pending" style={{animationDelay:(i*0.5)+'s'}}/>
           </g>
-        );
-      })}
-    </svg>
+        ))}
+
+        {/* Center core */}
+        <g>
+          <circle cx="150" cy="120" r="7" fill={hex} opacity="0.15"/>
+          <circle cx="150" cy="120" r="4" fill={hex} opacity="0.5" className="star-glow"/>
+          <circle cx="150" cy="120" r="2" fill="#fff" opacity="0.9"/>
+        </g>
+
+        {/* Completed glowy stars */}
+        {completedPositions.map((r,i)=>(
+          <g key={r.id} className="star-orbit" style={{animationDelay:(i*0.6)+'s'}}>
+            {/* outer glow */}
+            <circle cx={r.x} cy={r.y} r="12" fill={hex} opacity="0.08"/>
+            <circle cx={r.x} cy={r.y} r="7" fill={hex} opacity="0.12"/>
+            {/* animated star */}
+            <circle cx={r.x} cy={r.y} r="4.5" fill={hex} opacity="0.8" className="star-glow" style={{animationDelay:(i*0.4)+'s'}}/>
+            {/* bright core */}
+            <circle cx={r.x} cy={r.y} r="2" fill="#fff" opacity="0.95"/>
+            {/* cross sparkle */}
+            <line x1={r.x-7} y1={r.y} x2={r.x+7} y2={r.y} stroke={hex} strokeWidth="0.5" opacity="0.4"/>
+            <line x1={r.x} y1={r.y-7} x2={r.x} y2={r.y+7} stroke={hex} strokeWidth="0.5" opacity="0.4"/>
+          </g>
+        ))}
+      </svg>
+    </div>
   );
 }
 
-// Completion modal
-function CompleteModal({ resource, courseColor, onClose, onComplete }) {
-  const [note, setNote] = useState('');
-  const [tagInput, setTagInput] = useState('');
-  const [tags, setTags] = useState([]);
+// ─────────────────────────────────────────────
+// Complete Resource Modal
+// ─────────────────────────────────────────────
+function CompleteModal({resource,courseId,weeklyHours,onClose}){
+  const{completeResource}=useApp();
+  const[note,setNote]=useState('');
+  const[tagInput,setTagInput]=useState('');
+  const[tags,setTags]=useState([]);
 
-  const addTag = () => {
-    const t = tagInput.trim().toLowerCase();
-    if (t && !tags.includes(t)) setTags(prev => [...prev, t]);
-    setTagInput('');
-  };
+  function addTag(e){
+    if((e.key==='Enter'||e.key===',')&&tagInput.trim()){
+      e.preventDefault();
+      const t=tagInput.trim().toLowerCase().replace(/,/g,'');
+      if(t&&!tags.includes(t))setTags([...tags,t]);
+      setTagInput('');
+    }
+  }
+  function removeTag(t){setTags(tags.filter(x=>x!==t));}
 
-  const handleKeyDown = e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(); } };
+  function submit(e){
+    e.preventDefault();
+    completeResource(courseId,resource.id,{note:note.trim(),tags});
+    onClose();
+  }
 
-  return (
-    <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <motion.div className="modal" initial={{ scale: 0.95, y: 16, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
-          <div>
-            <h2 style={{ fontSize: '1.1rem', marginBottom: '0.2rem' }}>Mark complete</h2>
-            <p style={{ fontSize: '0.8rem', margin: 0, maxWidth: 380 }}>{resource.title}</p>
+  const inputStyle={width:'100%',background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:8,padding:'0.65rem 0.9rem',color:'var(--text)',fontFamily:'Space Grotesk,sans-serif',fontSize:'0.95rem',boxSizing:'border-box',outline:'none',marginBottom:'0.8rem'};
+  const labelStyle={display:'block',fontSize:'0.8rem',color:'var(--text-muted)',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'0.4rem'};
+  const rec=getWeeklyRecommendation(resource,weeklyHours||3);
+
+  return(
+    <form onSubmit={submit}>
+      <p style={{color:'var(--text-muted)',fontSize:'0.85rem',marginBottom:'1.2rem',padding:'0.6rem 0.9rem',background:'var(--bg-surface)',borderRadius:8,borderLeft:'3px solid var(--accent)'}}>
+        ✓ Completing: <strong style={{color:'var(--text)'}}>{resource.title}</strong>
+      </p>
+      <label style={labelStyle}>Your Thoughts & Reactions</label>
+      <textarea style={{...inputStyle,minHeight:100,resize:'vertical',marginBottom:'1rem'}} placeholder="What did you take away? What surprised you? What questions does this raise?" value={note} onChange={e=>setNote(e.target.value)}/>
+      <label style={labelStyle}>Tags (press Enter after each)</label>
+      <div style={{background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:8,padding:'0.4rem',marginBottom:'1rem',display:'flex',flexWrap:'wrap',gap:'0.4rem',alignItems:'center'}}>
+        {tags.map(t=>(
+          <span key={t} style={{display:'inline-flex',alignItems:'center',gap:'0.3rem',padding:'0.2rem 0.6rem',background:'var(--accent-dim)',color:'var(--accent)',borderRadius:20,fontSize:'0.8rem',fontWeight:500}}>
+            {t}<button type="button" onClick={()=>removeTag(t)} style={{background:'none',border:'none',color:'inherit',cursor:'pointer',lineHeight:1,padding:0,fontSize:'0.9rem'}}>×</button>
+          </span>
+        ))}
+        <input style={{border:'none',outline:'none',background:'transparent',color:'var(--text)',fontFamily:'Space Grotesk,sans-serif',fontSize:'0.9rem',minWidth:100,flex:1,padding:'0.2rem 0.3rem'}} placeholder="concepts, themes..." value={tagInput} onChange={e=>setTagInput(e.target.value)} onKeyDown={addTag}/>
+      </div>
+      <button type="submit" style={{width:'100%',padding:'0.75rem',background:'var(--accent)',color:'#fff',border:'none',borderRadius:8,fontFamily:'Space Grotesk,sans-serif',fontWeight:600,fontSize:'1rem',cursor:'pointer'}}>
+        Mark Complete
+      </button>
+    </form>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Main Page
+// ─────────────────────────────────────────────
+export default function CourseDetail(){
+  const{courseId}=useParams();
+  const{courses}=useApp();
+  const[expanded,setExpanded]=useState(null);
+  const[completing,setCompleting]=useState(null);
+
+  const course=courses.find(c=>c.id===courseId);
+  if(!course)return(<PageWrapper><div style={{padding:'4rem',textAlign:'center',color:'var(--text-muted)'}}>Course not found. <Link to="/courses" style={{color:'var(--accent)'}}>Back to Courses</Link></div></PageWrapper>);
+
+  const hex=SUBJECT_COLORS.find(c=>c.id===course.color)?.hex||'#6366f1';
+  const resources=course.resources||[];
+  const completed=resources.filter(r=>r.completed);
+  const pending=resources.filter(r=>!r.completed);
+
+  const TYPE_ICONS={'Article':'📄','Book':'📚','Video':'🎬','Podcast':'🎙','Essay':'✍️','Course':'🎓','Documentary':'🎞','Other':'🔗'};
+
+  function formatMins(m){if(m<60)return m+'min';const h=Math.floor(m/60);const min=m%60;return h+'h'+(min?` ${min}m`:'');}
+
+  return(
+    <PageWrapper>
+      <div style={{maxWidth:1000,margin:'0 auto'}}>
+        {/* Header */}
+        <div style={{marginBottom:'2.5rem'}}>
+          <Link to="/courses" style={{color:'var(--text-muted)',fontSize:'0.85rem',textDecoration:'none',display:'inline-flex',alignItems:'center',gap:'0.3rem',marginBottom:'1rem'}}>← All Courses</Link>
+          <div style={{display:'flex',gap:'2rem',alignItems:'flex-start',flexWrap:'wrap'}}>
+            <div style={{flex:'1 1 300px'}}>
+              <span style={{display:'inline-block',padding:'0.25rem 0.7rem',background:hex+'22',color:hex,borderRadius:6,fontSize:'0.75rem',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:'0.6rem'}}>
+                {course.color}
+              </span>
+              <h1 style={{fontFamily:'Cormorant Garamond,serif',fontSize:'clamp(2rem,5vw,3.2rem)',fontWeight:600,lineHeight:1.1,marginBottom:'0.5rem'}}>{course.name}</h1>
+              {course.description&&<p style={{color:'var(--text-muted)',fontSize:'0.95rem',lineHeight:1.6,maxWidth:500}}>{course.description}</p>}
+              <div style={{display:'flex',gap:'1.2rem',marginTop:'1rem',fontSize:'0.85rem',color:'var(--text-muted)'}}>
+                <span>⏱ {course.weeklyHours}h/week</span>
+                <span>📖 {completed.length}/{resources.length} resources</span>
+              </div>
+            </div>
+            <div style={{width:220,flexShrink:0}}>
+              <Constellation resources={resources} color={hex}/>
+            </div>
           </div>
-          <button className="btn-icon" onClick={onClose}><X size={18} /></button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {resource.essayPrompt && (
-            <div style={{ padding: '0.75rem', borderRadius: 10, background: 'var(--accent-soft)', border: '1px solid var(--border)' }}>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                💡 Essay prompt: {resource.essayPrompt}
-              </p>
+        {/* Resources */}
+        <div>
+          <h2 style={{fontFamily:'Cormorant Garamond,serif',fontSize:'1.6rem',fontWeight:600,marginBottom:'1.2rem'}}>Syllabus</h2>
+          {resources.length===0?(
+            <div style={{textAlign:'center',padding:'3rem',border:'1px dashed var(--border)',borderRadius:12,color:'var(--text-muted)'}}>
+              <p style={{fontFamily:'Cormorant Garamond,serif',fontSize:'1.2rem',marginBottom:'0.4rem'}}>No resources yet</p>
+              <p style={{fontSize:'0.85rem'}}>Add resources from the Courses page.</p>
+            </div>
+          ):(
+            <div style={{display:'flex',flexDirection:'column',gap:'0.6rem'}}>
+              {resources.map(r=>{
+                const isExpanded=expanded===r.id;
+                const rec=getWeeklyRecommendation(r,course.weeklyHours||3);
+                return(
+                  <div key={r.id} style={{background:'var(--bg-card)',border:'1px solid '+(r.completed?hex+'33':'var(--border)'),borderRadius:12,overflow:'hidden',transition:'border-color 0.2s',opacity:r.completed?0.75:1}}>
+                    {/* Row */}
+                    <div onClick={()=>setExpanded(isExpanded?null:r.id)}
+                      style={{display:'flex',alignItems:'center',gap:'1rem',padding:'1rem 1.2rem',cursor:'pointer',userSelect:'none'}}>
+                      <span style={{fontSize:'1.2rem',flexShrink:0}}>{TYPE_ICONS[r.type]||'🔗'}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:'flex',alignItems:'center',gap:'0.6rem',flexWrap:'wrap'}}>
+                          <span style={{fontFamily:'Space Grotesk,sans-serif',fontWeight:600,fontSize:'0.95rem'}}>{r.title}</span>
+                          {r.completed&&<span style={{fontSize:'0.7rem',padding:'0.15rem 0.5rem',background:hex+'22',color:hex,borderRadius:20,fontWeight:600}}>✓ Done</span>}
+                        </div>
+                        <div style={{display:'flex',gap:'0.8rem',marginTop:'0.2rem',fontSize:'0.78rem',color:'var(--text-muted)'}}>
+                          <span>{r.type}</span>
+                          <span>{formatMins(r.estimatedMins||60)}</span>
+                          {!r.completed&&<span style={{color:hex+'cc',fontWeight:500}}>{rec.label}</span>}
+                        </div>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:'0.8rem',flexShrink:0}}>
+                        {!r.completed&&(
+                          <button onClick={e=>{e.stopPropagation();setCompleting(r);}}
+                            style={{padding:'0.4rem 0.8rem',background:hex+'22',color:hex,border:'1px solid '+hex+'44',borderRadius:8,fontFamily:'Space Grotesk,sans-serif',fontWeight:600,fontSize:'0.8rem',cursor:'pointer'}}>
+                            Complete
+                          </button>
+                        )}
+                        <span style={{color:'var(--text-muted)',fontSize:'0.85rem',transition:'transform 0.2s',display:'inline-block',transform:isExpanded?'rotate(180deg)':'rotate(0)'}}>▾</span>
+                      </div>
+                    </div>
+
+                    {/* Expanded details */}
+                    {isExpanded&&(
+                      <div style={{borderTop:'1px solid var(--border)',padding:'1rem 1.2rem',background:'var(--bg-surface)'}}>
+                        {r.description&&<p style={{color:'var(--text-muted)',fontSize:'0.88rem',lineHeight:1.6,marginBottom:'0.8rem'}}>{r.description}</p>}
+                        {r.url&&(
+                          <a href={r.url} target="_blank" rel="noopener noreferrer"
+                            style={{display:'inline-flex',alignItems:'center',gap:'0.4rem',padding:'0.5rem 1rem',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:8,color:'var(--accent)',textDecoration:'none',fontFamily:'Space Grotesk,sans-serif',fontWeight:600,fontSize:'0.85rem',marginBottom:'0.8rem',transition:'background 0.15s'}}
+                            onMouseEnter={e=>e.currentTarget.style.background=hex+'18'}
+                            onMouseLeave={e=>e.currentTarget.style.background='var(--bg-card)'}>
+                            🔗 Open Resource ↗
+                          </a>
+                        )}
+                        {r.completed&&r.note&&(
+                          <div style={{marginTop:'0.5rem'}}>
+                            <p style={{fontSize:'0.75rem',color:'var(--text-muted)',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'0.3rem'}}>Your Notes</p>
+                            <p style={{fontFamily:'Cormorant Garamond,serif',fontSize:'1.05rem',lineHeight:1.7,color:'var(--text)',fontStyle:'italic'}}>{r.note}</p>
+                          </div>
+                        )}
+                        {r.completed&&r.tags?.length>0&&(
+                          <div style={{display:'flex',gap:'0.4rem',flexWrap:'wrap',marginTop:'0.6rem'}}>
+                            {r.tags.map(t=>(
+                              <span key={t} style={{padding:'0.2rem 0.6rem',background:hex+'18',color:hex,borderRadius:20,fontSize:'0.78rem',fontWeight:500}}>#{t}</span>
+                            ))}
+                          </div>
+                        )}
+                        {r.completedAt&&<p style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.6rem'}}>Completed {r.completedAt}</p>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
-          <div>
-            <label>Your note</label>
-            <textarea className="input" rows={4} placeholder="What struck you? What confused you? What connects to something else?" value={note} onChange={e => setNote(e.target.value)} style={{ resize: 'none' }} />
-          </div>
-          <div>
-            <label>Add to your knowledge vault (press Enter after each tag)</label>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', padding: '0.5rem', background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border)', minHeight: 44 }}>
-              {tags.map(t => (
-                <span key={t} className="tag" style={{ background: `${courseColor}20`, color: courseColor, border: `1px solid ${courseColor}40` }}>
-                  {t} <button onClick={() => setTags(prev => prev.filter(x => x !== t))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: '0 0 0 2px', display: 'flex', alignItems: 'center' }}><X size={10} /></button>
-                </span>
-              ))}
-              <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={handleKeyDown} onBlur={addTag}
-                placeholder={tags.length === 0 ? 'aesthetics, representation...' : ''} style={{ border: 'none', outline: 'none', background: 'none', fontSize: '0.82rem', color: 'var(--text-primary)', flex: 1, minWidth: 120 }} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.25rem' }}>
-            <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-            <motion.button className="btn btn-primary" onClick={() => onComplete({ note, tags })} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-              style={{ background: courseColor }}>
-              <CheckCircle2 size={15} /> Add to vault ✦
-            </motion.button>
-          </div>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-// Add Resource modal
-function AddResourceModal({ onClose, onAdd }) {
-  const [form, setForm] = useState({ title: '', type: 'Article', url: '', estimatedMins: 30, essayPrompt: '' });
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  return (
-    <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
-      <motion.div className="modal" initial={{ scale: 0.95, y: 16, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-          <h2>Add resource</h2>
-          <button className="btn-icon" onClick={onClose}><X size={18} /></button>
-        </div>
-        <form onSubmit={e => { e.preventDefault(); if (!form.title.trim()) return; onAdd({ ...form, id: `r${Date.now()}`, order: Date.now(), completed: false, completedAt: null, note: null, tags: [], essayLink: null }); onClose(); }}
-          style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div>
-            <label>Title *</label>
-            <input className="input" placeholder="e.g. Ways of Seeing — John Berger" value={form.title} onChange={e => set('title', e.target.value)} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div>
-              <label>Type</label>
-              <select className="input" value={form.type} onChange={e => set('type', e.target.value)} style={{ cursor: 'pointer' }}>
-                {RESOURCE_TYPES.map(t => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-            <div>
-              <label>Est. time (mins)</label>
-              <input className="input" type="number" min={5} max={600} value={form.estimatedMins} onChange={e => set('estimatedMins', parseInt(e.target.value))} />
-            </div>
-          </div>
-          <div>
-            <label>URL (optional)</label>
-            <input className="input" type="url" placeholder="https://" value={form.url} onChange={e => set('url', e.target.value)} />
-          </div>
-          <div>
-            <label>Essay prompt (optional)</label>
-            <input className="input" placeholder="A question to answer after consuming this" value={form.essayPrompt} onChange={e => set('essayPrompt', e.target.value)} />
-          </div>
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Add resource</button>
-          </div>
-        </form>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-export default function CourseDetail() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const { courses, completeResource, updateCourses } = useApp();
-  const course = courses.find(c => c.id === id);
-
-  const [completing, setCompleting] = useState(null);
-  const [expanded, setExpanded] = useState({});
-  const [showAddResource, setShowAddResource] = useState(false);
-
-  if (!course) return <PageWrapper><p>Course not found.</p></PageWrapper>;
-
-  const color = getColorHex(course.color);
-  const completed = course.resources.filter(r => r.completed);
-  const pct = Math.round((completed.length / Math.max(course.resources.length, 1)) * 100);
-
-  const handleComplete = ({ note, tags }) => {
-    completeResource(id, completing.id, { note, tags });
-    setCompleting(null);
-  };
-
-  const handleAddResource = (resource) => {
-    const updated = courses.map(c => c.id === id ? { ...c, resources: [...c.resources, resource] } : c);
-    updateCourses(updated);
-  };
-
-  const toggleExpand = rId => setExpanded(e => ({ ...e, [rId]: !e[rId] }));
-
-  return (
-    <PageWrapper>
-      {/* Back */}
-      <button onClick={() => navigate('/courses')} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem', background: 'none', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', padding: 0 }}>
-        <ArrowLeft size={15} /> Back to courses
-      </button>
-
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.75rem', gap: '1rem' }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, boxShadow: `0 0 10px ${color}` }} />
-            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 500 }}>Priority {course.priority} · {course.weeklyHours}h/week</span>
-          </div>
-          <h1 style={{ fontSize: '1.6rem', marginBottom: '0.5rem' }}>{course.title}</h1>
-          <p style={{ marginBottom: '1rem' }}>{course.description}</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ flex: 1, maxWidth: 240 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{completed.length} / {course.resources.length} complete</span>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color }}>{pct}%</span>
-              </div>
-              <div className="progress-track">
-                <motion.div className="progress-fill" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 1 }} style={{ background: color }} />
-              </div>
-            </div>
-          </div>
-        </div>
-        {/* Constellation */}
-        <div style={{ flexShrink: 0, padding: '0.5rem', background: 'var(--bg-secondary)', borderRadius: 16, border: '1px solid var(--border)' }}>
-          <Constellation resources={course.resources} color={color} />
         </div>
       </div>
 
-      {/* Resources */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <h2 style={{ fontSize: '1.1rem' }}>Syllabus</h2>
-        <button className="btn btn-ghost" style={{ fontSize: '0.8rem' }} onClick={() => setShowAddResource(true)}>
-          <Plus size={14} /> Add resource
-        </button>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-        {course.resources.sort((a, b) => a.order - b.order).map((resource, i) => {
-          const isExpanded = expanded[resource.id];
-          return (
-            <motion.div key={resource.id} className="card"
-              initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
-              style={{ borderLeft: `3px solid ${resource.completed ? color : 'var(--border)'}`, borderRadius: '0 12px 12px 0', padding: '0.85rem 1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
-                <button onClick={() => !resource.completed && setCompleting(resource)}
-                  style={{ background: 'none', border: 'none', cursor: resource.completed ? 'default' : 'pointer', flexShrink: 0, padding: '2px 0', color: resource.completed ? color : 'var(--border-strong)' }}>
-                  {resource.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}
-                </button>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.25rem' }}>
-                    <span style={{ fontWeight: 500, fontSize: '0.9rem', color: resource.completed ? 'var(--text-secondary)' : 'var(--text-primary)', textDecoration: resource.completed ? 'none' : 'none' }}>
-                      {i + 1}. {resource.title}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      <ResourceIcon type={resource.type} size={12} color="var(--text-muted)" /> {resource.type}
-                    </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      <Clock size={11} /> {resource.estimatedMins < 60 ? `${resource.estimatedMins}m` : `${Math.round(resource.estimatedMins / 60 * 10) / 10}h`}
-                    </span>
-                    {resource.completed && resource.completedAt && (
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Done {resource.completedAt}</span>
-                    )}
-                    {resource.essayPrompt && !resource.essayLink && resource.completed && (
-                      <span style={{ fontSize: '0.72rem', padding: '0.15rem 0.5rem', borderRadius: 20, background: 'rgba(244,63,94,0.1)', color: '#f43f5e', fontWeight: 500 }}>Essay due</span>
-                    )}
-                    {resource.essayLink && (
-                      <a href={resource.essayLink} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.72rem', color: color }} onClick={e => e.stopPropagation()}>
-                        <ExternalLink size={11} /> Essay
-                      </a>
-                    )}
-                  </div>
-                  {/* Tags */}
-                  {resource.tags?.length > 0 && (
-                    <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
-                      {resource.tags.map(t => (
-                        <span key={t} className="tag" style={{ background: `${color}14`, color, border: `1px solid ${color}30`, fontSize: '0.68rem' }}>
-                          <Tag size={9} /> {t}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
-                  {resource.note && (
-                    <button className="btn-icon" onClick={() => toggleExpand(resource.id)}>
-                      {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                    </button>
-                  )}
-                  {!resource.completed && (
-                    <button className="btn btn-ghost" style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem' }} onClick={() => setCompleting(resource)}>
-                      Complete
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Expanded note */}
-              <AnimatePresence>
-                {isExpanded && resource.note && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
-                    <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'var(--bg-secondary)', borderRadius: 10, borderLeft: `2px solid ${color}` }}>
-                      <p style={{ margin: 0, fontSize: '0.83rem', color: 'var(--text-secondary)', fontStyle: 'italic', lineHeight: 1.6 }}>"{resource.note}"</p>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
-          );
-        })}
-      </div>
-
-      <AnimatePresence>
-        {completing && (
-          <CompleteModal resource={completing} courseColor={color} onClose={() => setCompleting(null)} onComplete={handleComplete} />
-        )}
-        {showAddResource && (
-          <AddResourceModal onClose={() => setShowAddResource(false)} onAdd={handleAddResource} />
-        )}
-      </AnimatePresence>
+      {/* Complete modal */}
+      {completing&&(
+        <div style={{position:'fixed',inset:0,zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)'}}
+          onClick={e=>{if(e.target===e.currentTarget)setCompleting(null);}}>
+          <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:16,padding:'2rem',width:'min(520px,90vw)',maxHeight:'80vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.5rem'}}>
+              <h2 style={{fontFamily:'Cormorant Garamond,serif',fontSize:'1.6rem',fontWeight:600}}>Log Completion</h2>
+              <button onClick={()=>setCompleting(null)} style={{background:'none',border:'none',color:'var(--text-muted)',fontSize:'1.4rem',cursor:'pointer',lineHeight:1}}>×</button>
+            </div>
+            <CompleteModal resource={completing} courseId={course.id} weeklyHours={course.weeklyHours} onClose={()=>setCompleting(null)}/>
+          </div>
+        </div>
+      )}
     </PageWrapper>
   );
 }

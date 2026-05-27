@@ -1,144 +1,228 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, X, BookOpen, Clock, Target, ArrowRight } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { calcCourseProgress, calcWeeksRemaining, getColorHex, SUBJECT_COLORS, RESOURCE_TYPES } from '../store/data';
-import PageWrapper from '../components/PageWrapper';
+import{useState}from'react';
+import{Link}from'react-router-dom';
+import{useApp}from'../context/AppContext';
+import{SUBJECT_COLORS,RESOURCE_TYPES,calcCourseProgress}from'../store/data';
+import PageWrapper from'../components/PageWrapper';
 
-const PRIORITIES = ['Highest','High','Medium','Low'];
-
-function AddCourseModal({ onClose, onAdd }) {
-  const [form, setForm] = useState({ title: '', description: '', color: 'indigo', weeklyHours: 2, priority: 1, targetWeeks: 12 });
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  const handleSubmit = e => {
-    e.preventDefault();
-    if (!form.title.trim()) return;
-    onAdd({ ...form, id: `c${Date.now()}`, resources: [], startDate: new Date().toISOString().split('T')[0] });
-    onClose();
-  };
-
-  return (
-    <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
-      <motion.div className="modal" initial={{ scale: 0.95, opacity: 0, y: 16 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h2>New course</h2>
-          <button className="btn-icon" onClick={onClose}><X size={18} /></button>
+function Modal({title,onClose,children}){
+  return(
+    <div style={{position:'fixed',inset:0,zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)'}}
+      onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:16,padding:'2rem',width:'min(520px,90vw)',maxHeight:'80vh',overflowY:'auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.5rem'}}>
+          <h2 style={{fontFamily:'Cormorant Garamond,serif',fontSize:'1.6rem',fontWeight:600}}>{title}</h2>
+          <button onClick={onClose} style={{background:'none',border:'none',color:'var(--text-muted)',fontSize:'1.4rem',cursor:'pointer',lineHeight:1}}>×</button>
         </div>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div>
-            <label>Course title *</label>
-            <input className="input" placeholder="e.g. Art History: The Renaissance" value={form.title} onChange={e => set('title', e.target.value)} />
-          </div>
-          <div>
-            <label>Description</label>
-            <textarea className="input" rows={2} placeholder="What will you explore?" value={form.description} onChange={e => set('description', e.target.value)} style={{ resize: 'none' }} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div>
-              <label>Weekly hours</label>
-              <input className="input" type="number" min={0.5} max={20} step={0.5} value={form.weeklyHours} onChange={e => set('weeklyHours', parseFloat(e.target.value))} />
-            </div>
-            <div>
-              <label>Target duration (weeks)</label>
-              <input className="input" type="number" min={1} max={52} value={form.targetWeeks} onChange={e => set('targetWeeks', parseInt(e.target.value))} />
-            </div>
-          </div>
-          <div>
-            <label>Priority</label>
-            <select className="input" value={form.priority} onChange={e => set('priority', parseInt(e.target.value))} style={{ cursor: 'pointer' }}>
-              {PRIORITIES.map((p, i) => <option key={p} value={i + 1}>{p}</option>)}
-            </select>
-          </div>
-          <div>
-            <label>Color</label>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-              {SUBJECT_COLORS.map(c => (
-                <button key={c.id} type="button" onClick={() => set('color', c.id)} style={{
-                  width: 28, height: 28, borderRadius: '50%', background: c.hex, border: form.color === c.id ? `3px solid var(--text-primary)` : '3px solid transparent',
-                  cursor: 'pointer', transition: 'transform 0.15s', transform: form.color === c.id ? 'scale(1.2)' : 'scale(1)',
-                }} />
-              ))}
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Create course</button>
-          </div>
-        </form>
-      </motion.div>
-    </motion.div>
+        {children}
+      </div>
+    </div>
   );
 }
 
-export default function Courses() {
-  const { courses, addCourse } = useApp();
-  const navigate = useNavigate();
-  const [showAdd, setShowAdd] = useState(false);
+function AddCourseModal({onClose}){
+  const{addCourse}=useApp();
+  const[name,setName]=useState('');
+  const[description,setDescription]=useState('');
+  const[color,setColor]=useState('indigo');
+  const[weeklyHours,setWeeklyHours]=useState(3);
+  const[error,setError]=useState('');
 
-  return (
-    <PageWrapper>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' }}>
+  const inputStyle={width:'100%',background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:8,padding:'0.65rem 0.9rem',color:'var(--text)',fontFamily:'Space Grotesk,sans-serif',fontSize:'0.95rem',boxSizing:'border-box',outline:'none',marginBottom:'1rem'};
+  const labelStyle={display:'block',fontSize:'0.8rem',color:'var(--text-muted)',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'0.4rem'};
+
+  function handleSubmit(e){
+    e.preventDefault();
+    if(!name.trim()){setError('Course name is required.');return;}
+    addCourse({
+      id:'c'+Date.now(),name:name.trim(),description:description.trim(),color,weeklyHours,
+      createdAt:new Date().toISOString().split('T')[0],resources:[],
+    });
+    onClose();
+  }
+
+  return(
+    <form onSubmit={handleSubmit}>
+      <label style={labelStyle}>Course Name</label>
+      <input style={inputStyle} placeholder="e.g. Art History 101" value={name} onChange={e=>setName(e.target.value)} autoFocus/>
+      <label style={labelStyle}>Description (optional)</label>
+      <textarea style={{...inputStyle,minHeight:80,resize:'vertical'}} placeholder="What are you exploring?" value={description} onChange={e=>setDescription(e.target.value)}/>
+      <label style={labelStyle}>Weekly Hours</label>
+      <input type="number" style={{...inputStyle,width:100}} min={1} max={40} value={weeklyHours} onChange={e=>setWeeklyHours(Number(e.target.value))}/>
+      <label style={labelStyle}>Color</label>
+      <div style={{display:'flex',gap:'0.6rem',marginBottom:'1.2rem',flexWrap:'wrap'}}>
+        {SUBJECT_COLORS.map(c=>(
+          <button key={c.id} type="button" onClick={()=>setColor(c.id)}
+            style={{width:28,height:28,borderRadius:'50%',background:c.hex,border:'3px solid '+(color===c.id?'var(--text)':'transparent'),cursor:'pointer',transition:'transform 0.15s',transform:color===c.id?'scale(1.25)':'scale(1)'}}/>
+        ))}
+      </div>
+      {error&&<p style={{color:'#f87171',fontSize:'0.85rem',marginBottom:'1rem'}}>{error}</p>}
+      <button type="submit" style={{width:'100%',padding:'0.75rem',background:'var(--accent)',color:'#fff',border:'none',borderRadius:8,fontFamily:'Space Grotesk,sans-serif',fontWeight:600,fontSize:'1rem',cursor:'pointer'}}>
+        Add Course
+      </button>
+    </form>
+  );
+}
+
+function AddResourceModal({courseId,onClose}){
+  const{courses,updateCourses}=useApp();
+  const[title,setTitle]=useState('');
+  const[type,setType]=useState('Article');
+  const[url,setUrl]=useState('');
+  const[estimatedMins,setEstimatedMins]=useState(60);
+  const[description,setDescription]=useState('');
+  const[error,setError]=useState('');
+
+  const inputStyle={width:'100%',background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:8,padding:'0.65rem 0.9rem',color:'var(--text)',fontFamily:'Space Grotesk,sans-serif',fontSize:'0.95rem',boxSizing:'border-box',outline:'none',marginBottom:'1rem'};
+  const labelStyle={display:'block',fontSize:'0.8rem',color:'var(--text-muted)',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'0.4rem'};
+
+  function handleSubmit(e){
+    e.preventDefault();
+    if(!title.trim()){setError('Resource title is required.');return;}
+    const course=courses.find(c=>c.id===courseId);
+    if(!course)return;
+    const resource={id:'r'+Date.now(),title:title.trim(),type,url:url.trim(),estimatedMins,description:description.trim(),completed:false,tags:[],createdAt:new Date().toISOString().split('T')[0]};
+    const updated=courses.map(c=>c.id===courseId?{...c,resources:[...(c.resources||[]),resource]}:c);
+    updateCourses(updated);
+    onClose();
+  }
+
+  return(
+    <form onSubmit={handleSubmit}>
+      <label style={labelStyle}>Title</label>
+      <input style={inputStyle} placeholder="Resource title" value={title} onChange={e=>setTitle(e.target.value)} autoFocus/>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.8rem'}}>
         <div>
-          <h1>Courses</h1>
-          <p style={{ marginTop: '0.3rem' }}>{courses.length} active {courses.length === 1 ? 'course' : 'courses'}</p>
+          <label style={labelStyle}>Type</label>
+          <select style={{...inputStyle,cursor:'pointer'}} value={type} onChange={e=>setType(e.target.value)}>
+            {RESOURCE_TYPES.map(t=><option key={t}>{t}</option>)}
+          </select>
         </div>
-        <motion.button className="btn btn-primary" onClick={() => setShowAdd(true)} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
-          <Plus size={16} /> New course
-        </motion.button>
+        <div>
+          <label style={labelStyle}>Est. Minutes</label>
+          <input type="number" style={inputStyle} min={5} value={estimatedMins} onChange={e=>setEstimatedMins(Number(e.target.value))}/>
+        </div>
+      </div>
+      <label style={labelStyle}>URL (optional)</label>
+      <input style={inputStyle} placeholder="https://..." value={url} onChange={e=>setUrl(e.target.value)}/>
+      <label style={labelStyle}>Notes (optional)</label>
+      <textarea style={{...inputStyle,minHeight:70,resize:'vertical'}} placeholder="Why this resource?" value={description} onChange={e=>setDescription(e.target.value)}/>
+      {error&&<p style={{color:'#f87171',fontSize:'0.85rem',marginBottom:'1rem'}}>{error}</p>}
+      <button type="submit" style={{width:'100%',padding:'0.75rem',background:'var(--accent)',color:'#fff',border:'none',borderRadius:8,fontFamily:'Space Grotesk,sans-serif',fontWeight:600,fontSize:'1rem',cursor:'pointer'}}>
+        Add Resource
+      </button>
+    </form>
+  );
+}
+
+function DeleteConfirmModal({course,onConfirm,onClose}){
+  return(
+    <div style={{textAlign:'center'}}>
+      <div style={{fontSize:'3rem',marginBottom:'1rem'}}>⚠️</div>
+      <p style={{marginBottom:'0.5rem',fontSize:'1rem',color:'var(--text)'}}>Delete <strong style={{fontFamily:'Cormorant Garamond,serif',fontSize:'1.1em'}}>{course.name}</strong>?</p>
+      <p style={{color:'var(--text-muted)',fontSize:'0.85rem',lineHeight:1.6,marginBottom:'1.5rem'}}>All resources and activity entries for this course will be permanently removed.</p>
+      <div style={{display:'flex',gap:'0.8rem'}}>
+        <button onClick={onClose} style={{flex:1,padding:'0.7rem',background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:8,color:'var(--text)',fontFamily:'Space Grotesk,sans-serif',fontWeight:500,cursor:'pointer'}}>
+          Cancel
+        </button>
+        <button onClick={onConfirm} style={{flex:1,padding:'0.7rem',background:'#ef4444',border:'none',borderRadius:8,color:'#fff',fontFamily:'Space Grotesk,sans-serif',fontWeight:600,cursor:'pointer'}}>
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function Courses(){
+  const{courses,deleteCourse}=useApp();
+  const[showAddCourse,setShowAddCourse]=useState(false);
+  const[addResourceFor,setAddResourceFor]=useState(null);
+  const[confirmDelete,setConfirmDelete]=useState(null);
+
+  return(
+    <PageWrapper>
+      <div style={{maxWidth:1100,margin:'0 auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:'2.5rem'}}>
+          <div>
+            <h1 style={{fontFamily:'Cormorant Garamond,serif',fontSize:'clamp(2rem,4vw,3rem)',fontWeight:600,lineHeight:1.1,marginBottom:'0.3rem'}}>Your Courses</h1>
+            <p style={{color:'var(--text-muted)',fontSize:'0.95rem'}}>
+              {courses.length===0?'No courses yet — add your first subject below':courses.length+' subject'+(courses.length!==1?'s':'')+' in your curriculum'}
+            </p>
+          </div>
+          <button onClick={()=>setShowAddCourse(true)}
+            style={{padding:'0.7rem 1.4rem',background:'var(--accent)',color:'#fff',border:'none',borderRadius:10,fontFamily:'Space Grotesk,sans-serif',fontWeight:600,fontSize:'0.9rem',cursor:'pointer',whiteSpace:'nowrap'}}>
+            + Add Course
+          </button>
+        </div>
+
+        {courses.length===0?(
+          <div style={{textAlign:'center',padding:'5rem 2rem',border:'1px dashed var(--border)',borderRadius:16,color:'var(--text-muted)'}}>
+            <div style={{fontSize:'3.5rem',marginBottom:'1rem',opacity:0.4}}>📚</div>
+            <p style={{fontFamily:'Cormorant Garamond,serif',fontSize:'1.4rem',marginBottom:'0.5rem'}}>Your curriculum is empty</p>
+            <p style={{fontSize:'0.9rem'}}>Add a course to begin building your learning universe.</p>
+          </div>
+        ):(
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:'1.5rem'}}>
+            {courses.map(course=>{
+              const progress=calcCourseProgress(course);
+              const hex=SUBJECT_COLORS.find(c=>c.id===course.color)?.hex||'#6366f1';
+              const total=course.resources?.length||0;
+              const done=course.resources?.filter(r=>r.completed).length||0;
+              return(
+                <div key={course.id} style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:16,overflow:'hidden',display:'flex',flexDirection:'column',transition:'transform 0.2s,box-shadow 0.2s'}}
+                  onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-3px)';e.currentTarget.style.boxShadow='0 12px 40px '+hex+'22';}}
+                  onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='';}}>
+                  <div style={{height:4,background:'linear-gradient(90deg,'+hex+','+hex+'88)'}}/>
+                  <div style={{padding:'1.4rem',flex:1,display:'flex',flexDirection:'column'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'0.8rem'}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <span style={{display:'inline-block',padding:'0.2rem 0.6rem',background:hex+'22',color:hex,borderRadius:6,fontSize:'0.7rem',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:'0.5rem'}}>
+                          {course.color}
+                        </span>
+                        <h3 style={{fontFamily:'Cormorant Garamond,serif',fontSize:'1.4rem',fontWeight:600,lineHeight:1.2,marginBottom:'0.3rem'}}>{course.name}</h3>
+                        {course.description&&<p style={{color:'var(--text-muted)',fontSize:'0.85rem',lineHeight:1.5,marginBottom:0}}>{course.description}</p>}
+                      </div>
+                      <button onClick={()=>setConfirmDelete(course)} title="Delete course"
+                        style={{background:'none',border:'none',color:'var(--text-muted)',fontSize:'1rem',cursor:'pointer',padding:'0.3rem 0.4rem',borderRadius:6,flexShrink:0,marginLeft:'0.5rem',opacity:0.5,transition:'opacity 0.15s,color 0.15s'}}
+                        onMouseEnter={e=>{e.currentTarget.style.opacity='1';e.currentTarget.style.color='#ef4444';}}
+                        onMouseLeave={e=>{e.currentTarget.style.opacity='0.5';e.currentTarget.style.color='var(--text-muted)';}}>
+                        🗑
+                      </button>
+                    </div>
+
+                    <div style={{marginBottom:'1rem'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',fontSize:'0.78rem',color:'var(--text-muted)',marginBottom:'0.35rem'}}>
+                        <span>{done} / {total} resources</span>
+                        <span style={{color:hex,fontWeight:600}}>{progress}%</span>
+                      </div>
+                      <div style={{height:4,background:'var(--bg-surface)',borderRadius:4,overflow:'hidden'}}>
+                        <div style={{height:'100%',width:progress+'%',background:'linear-gradient(90deg,'+hex+','+hex+'bb)',borderRadius:4,transition:'width 0.5s ease'}}/>
+                      </div>
+                    </div>
+
+                    <div style={{display:'flex',gap:'0.5rem',marginTop:'auto',paddingTop:'0.8rem',borderTop:'1px solid var(--border)'}}>
+                      <Link to={'/courses/'+course.id} style={{flex:1,padding:'0.6rem',background:hex+'18',color:hex,border:'1px solid '+hex+'44',borderRadius:8,fontFamily:'Space Grotesk,sans-serif',fontWeight:600,fontSize:'0.85rem',cursor:'pointer',textDecoration:'none',textAlign:'center'}}>
+                        View Course
+                      </Link>
+                      <button onClick={()=>setAddResourceFor(course.id)}
+                        style={{flex:1,padding:'0.6rem',background:'var(--bg-surface)',color:'var(--text-muted)',border:'1px solid var(--border)',borderRadius:8,fontFamily:'Space Grotesk,sans-serif',fontWeight:500,fontSize:'0.85rem',cursor:'pointer'}}>
+                        + Resource
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.25rem' }}>
-        {courses.map((course, i) => {
-          const pct = calcCourseProgress(course);
-          const weeksLeft = calcWeeksRemaining(course);
-          const color = getColorHex(course.color);
-          return (
-            <motion.div key={course.id} className="card"
-              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}
-              style={{ cursor: 'pointer', borderTop: `3px solid ${color}`, transition: 'all 0.2s' }}
-              onClick={() => navigate(`/courses/${course.id}`)}
-              whileHover={{ y: -2, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: `${color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <BookOpen size={17} style={{ color }} />
-                </div>
-                <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '0.2rem 0.6rem', borderRadius: 20, background: `${color}18`, color }}>
-                  Priority {course.priority}
-                </span>
-              </div>
-              <h3 style={{ marginBottom: '0.4rem', fontSize: '1rem', lineHeight: 1.3 }}>{course.title}</h3>
-              <p style={{ fontSize: '0.8rem', marginBottom: '1rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{course.description}</p>
-              <div style={{ marginBottom: '0.85rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{course.resources.filter(r => r.completed).length} / {course.resources.length} resources</span>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color }}>{pct}%</span>
-                </div>
-                <div className="progress-track">
-                  <motion.div className="progress-fill" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.8, delay: i * 0.06 + 0.3 }} style={{ background: color }} />
-                </div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    <Clock size={12} /> {course.weeklyHours}h/week
-                  </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    <Target size={12} /> ~{weeksLeft}w left
-                  </span>
-                </div>
-                <ArrowRight size={15} style={{ color: 'var(--text-muted)' }} />
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
-
-      <AnimatePresence>
-        {showAdd && <AddCourseModal onClose={() => setShowAdd(false)} onAdd={addCourse} />}
-      </AnimatePresence>
+      {showAddCourse&&<Modal title="New Course" onClose={()=>setShowAddCourse(false)}><AddCourseModal onClose={()=>setShowAddCourse(false)}/></Modal>}
+      {addResourceFor&&<Modal title="Add Resource" onClose={()=>setAddResourceFor(null)}><AddResourceModal courseId={addResourceFor} onClose={()=>setAddResourceFor(null)}/></Modal>}
+      {confirmDelete&&(
+        <Modal title="" onClose={()=>setConfirmDelete(null)}>
+          <DeleteConfirmModal course={confirmDelete} onClose={()=>setConfirmDelete(null)} onConfirm={()=>{deleteCourse(confirmDelete.id);setConfirmDelete(null);}}/>
+        </Modal>
+      )}
     </PageWrapper>
   );
 }
