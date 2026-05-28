@@ -40,12 +40,16 @@ export default function WeeklyPlan(){
               <p style={{fontFamily:'Cormorant Garamond,serif',fontSize:'1.2rem',fontWeight:500,marginBottom:'0.2rem'}}>How many hours do you have this week?</p>
               <p style={{color:'var(--text-muted)',fontSize:'0.82rem'}}>The plan adjusts automatically — books get reading sessions, shorter resources get completed.</p>
             </div>
-            <div style={{display:'flex',alignItems:'center',gap:'0.8rem',flexShrink:0}}>
-              <button onClick={()=>setTotalHours(h=>Math.max(0.5,+(h-0.5).toFixed(1)))}
-                style={{width:32,height:32,borderRadius:'50%',background:'var(--bg-surface)',border:'1px solid var(--border)',color:'var(--text)',fontSize:'1.1rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
-              <span style={{fontFamily:'Cormorant Garamond,serif',fontSize:'2.2rem',fontWeight:600,minWidth:70,textAlign:'center'}}>{totalHours}h</span>
-              <button onClick={()=>setTotalHours(h=>Math.min(40,+(h+0.5).toFixed(1)))}
-                style={{width:32,height:32,borderRadius:'50%',background:'var(--bg-surface)',border:'1px solid var(--border)',color:'var(--text)',fontSize:'1.1rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'0.5rem',flexShrink:0}}>
+              <span style={{fontFamily:'Cormorant Garamond,serif',fontSize:'2rem',fontWeight:600,lineHeight:1}}>{totalHours}h</span>
+              <div style={{display:'flex',gap:'0.35rem',flexWrap:'wrap',justifyContent:'flex-end'}}>
+                {[0.5,1,1.5,2,3,4,5,6,8,10].map(h=>(
+                  <button key={h} type="button" onClick={()=>setTotalHours(h)}
+                    style={{padding:'0.3rem 0.6rem',borderRadius:20,border:'1px solid '+(totalHours===h?'var(--accent)':'var(--border)'),background:totalHours===h?'var(--accent-dim)':'var(--bg-surface)',color:totalHours===h?'var(--accent)':'var(--text-muted)',fontFamily:'Space Grotesk,sans-serif',fontSize:'0.78rem',fontWeight:totalHours===h?700:400,cursor:'pointer',transition:'all 0.15s'}}>
+                    {h}h
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -105,9 +109,9 @@ export default function WeeklyPlan(){
                       </div>
 
                       {/* Book chapter hint */}
-                      {resource.type==='Book'&&resource.chapters&&(
+                      {resource.type==='Book'&&(resource.pages||resource.chapters)&&(
                         <p style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.4rem'}}>
-                          ~{Math.ceil((allocMins/((resource.estimatedMins||600)/resource.chapters))+0.01)} chapters at this pace
+                          ~{Math.ceil((allocMins/((resource.estimatedMins||600)/(resource.pages||resource.chapters||1)))+0.01)} pages at this pace
                         </p>
                       )}
                     </div>

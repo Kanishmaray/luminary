@@ -66,7 +66,7 @@ function AddResourceModal({courseId,onClose}){
   const[type,setType]=useState('Article');
   const[url,setUrl]=useState('');
   const[estimatedMins,setEstimatedMins]=useState(60);
-  const[chapters,setChapters]=useState('');
+  const[pages,setPages]=useState('');
   const[description,setDescription]=useState('');
   const[error,setError]=useState('');
 
@@ -82,7 +82,7 @@ function AddResourceModal({courseId,onClose}){
     const resource={
       id:'r'+Date.now(),title:title.trim(),type,url:url.trim(),
       estimatedMins:Number(estimatedMins),
-      ...(isBook&&chapters?{chapters:Number(chapters)}:{}),
+      ...(isBook&&pages?{pages:Number(pages)}:{}),
       description:description.trim(),completed:false,tags:[],
       createdAt:new Date().toISOString().split('T')[0],
     };
@@ -104,12 +104,12 @@ function AddResourceModal({courseId,onClose}){
           <p style={{fontSize:'0.8rem',color:'var(--text-muted)',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'0.8rem'}}>Book Details</p>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.8rem'}}>
             <div>
-              <label style={labelStyle}>Total Minutes to Read</label>
-              <input type="number" style={{...inputStyle,marginBottom:0}} min={10} value={estimatedMins} onChange={e=>setEstimatedMins(e.target.value)} placeholder="e.g. 600"/>
+              <label style={labelStyle}>Total Hours to Read</label>
+              <input type="number" style={{...inputStyle,marginBottom:0}} min={10} value={+(estimatedMins/60).toFixed(1)} onChange={e=>setEstimatedMins(Math.round(parseFloat(e.target.value||1)*60))} placeholder="e.g. 10"/>
             </div>
             <div>
-              <label style={labelStyle}>Chapters (optional)</label>
-              <input type="number" style={{...inputStyle,marginBottom:0}} min={1} value={chapters} onChange={e=>setChapters(e.target.value)} placeholder="e.g. 24"/>
+              <label style={labelStyle}>Pages (optional)</label>
+              <input type="number" style={{...inputStyle,marginBottom:0}} min={1} value={pages} onChange={e=>setPages(e.target.value)} placeholder="e.g. 320"/>
             </div>
           </div>
           <p style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.6rem',lineHeight:1.5}}>
