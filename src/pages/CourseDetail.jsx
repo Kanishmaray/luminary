@@ -102,7 +102,7 @@ function CompleteModal({resource,courseId,onClose}){
 
 // ── Main Page ──────────────────────────────────────────────────────────────
 export default function CourseDetail(){
-  const{courseId}=useParams();
+  const{id:courseId}=useParams();
   const{courses}=useApp();
   const[expanded,setExpanded]=useState(null);
   const[completing,setCompleting]=useState(null);
