@@ -1,5 +1,5 @@
 import{createContext,useContext,useState,useEffect,useCallback}from'react';
-import{getStoredUser,saveStoredUser,getSession,saveSession,clearSession,getCourses,getWeeklyPlan,getActivity,saveCourses,saveWeeklyPlan,saveActivity,hashPassword}from'../store/data';
+import{getStoredUser,saveStoredUser,getSession,saveSession,clearSession,getCourses,getActivity,saveCourses,saveActivity,hashPassword}from'../store/data';
 
 const AppContext=createContext(null);
 
@@ -7,7 +7,6 @@ export function AppProvider({children}){
   const[theme,setTheme]=useState(()=>localStorage.getItem('lum_theme')||'dark');
   const[session,setSession]=useState(getSession);
   const[courses,setCourses]=useState(getCourses);
-  const[weeklyPlan,setWeeklyPlan]=useState(getWeeklyPlan);
   const[activity,setActivity]=useState(getActivity);
 
   useEffect(()=>{document.documentElement.setAttribute('data-theme',theme);localStorage.setItem('lum_theme',theme);},[theme]);
@@ -35,7 +34,6 @@ export function AppProvider({children}){
   const logout=useCallback(()=>{clearSession();setSession(null);},[]);
 
   const updateCourses=useCallback(c=>{saveCourses(c);setCourses(c);},[]);
-  const updateWeeklyPlan=useCallback(w=>{saveWeeklyPlan(w);setWeeklyPlan(w);},[]);
   const updateActivity=useCallback(a=>{saveActivity(a);setActivity(a);},[]);
 
   const addCourse=useCallback(course=>{
@@ -73,7 +71,7 @@ export function AppProvider({children}){
   const user=getStoredUser();
 
   return(
-    <AppContext.Provider value={{theme,toggleTheme,session,user,courses,weeklyPlan,activity,signup,login,logout,addCourse,deleteCourse,completeResource,addEssayLink,updateCourses,updateWeeklyPlan}}>
+    <AppContext.Provider value={{theme,toggleTheme,session,user,courses,activity,signup,login,logout,addCourse,deleteCourse,completeResource,addEssayLink,updateCourses}}>
       {children}
     </AppContext.Provider>
   );
